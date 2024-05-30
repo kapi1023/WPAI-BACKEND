@@ -1,8 +1,8 @@
 package models
 
 type User struct {
-	ID       int
-	Username string
-	Password string
-	IsAdmin  bool
+	ID       int    `json:"id"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	IsAdmin  bool   `json:"isAdmin"`
 }
