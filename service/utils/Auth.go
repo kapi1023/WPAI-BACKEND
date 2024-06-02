@@ -8,13 +8,13 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var jwtKey = []byte("your_secret_key")
-
 type Claims struct {
 	UserID  int  `json:"user_id"`
 	IsAdmin bool `json:"is_admin"`
 	jwt.StandardClaims
 }
+
+var jwtKey = []byte("5zLZHHndhY95lbJPgOweh4dKRbOeH8c4")
 
 func HashPassword(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -56,22 +56,4 @@ func ParseToken(tokenStr string) (*Claims, error) {
 	}
 
 	return claims, nil
-}
-
-func GetUserIDFromToken(tokenStr string) (int, error) {
-	claims, err := ParseToken(tokenStr)
-	if err != nil {
-		return 0, err
-	}
-
-	return claims.UserID, nil
-}
-
-func GetIsAdminFromToken(tokenStr string) (bool, error) {
-	claims, err := ParseToken(tokenStr)
-	if err != nil {
-		return false, err
-	}
-
-	return claims.IsAdmin, nil
 }

@@ -3,49 +3,45 @@ package handlers
 import (
 	"airplane/service/models"
 	"airplane/service/utils"
-	"database/sql"
 	"encoding/json"
 	"net/http"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/julienschmidt/httprouter"
 )
 
-func LoginHandler(db *sql.DB) httprouter.Handle {
+func LoginHandler(db *sqlx.DB) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-		var credentials models.Credentials
-		err := json.NewDecoder(r.Body).Decode(&credentials)
+		var creds models.Credentials
+		err := json.NewDecoder(r.Body).Decode(&creds)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, "Invalid request payload", http.StatusBadRequest)
 			return
 		}
 
 		var user models.User
-		err = db.QueryRow("SELECT id, password, is_admin FROM users WHERE username=$1", credentials.Username).Scan(&user.ID, &user.Password, &user.IsAdmin)
+		err = db.QueryRow("SELECT id, username, password, is_admin FROM usersAirplane WHERE username = $1", creds.Username).Scan(&user.ID, &user.Username, &user.Password, &user.IsAdmin)
 		if err != nil {
-			if err == sql.ErrNoRows {
-				http.Error(w, "Invalid credentials", http.StatusUnauthorized)
-				return
-			}
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, "Invalid username or password", http.StatusUnauthorized)
 			return
 		}
 
-		if !utils.CheckPasswordHash(credentials.Password, user.Password) {
-			http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+		if !utils.CheckPasswordHash(creds.Password, user.Password) {
+			http.Error(w, "Invalid username or password", http.StatusUnauthorized)
 			return
 		}
 
 		token, err := utils.GenerateToken(user.ID, user.IsAdmin)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 			return
 		}
 
-		http.SetCookie(w, &http.Cookie{
-			Name:  "token",
-			Value: token,
-			Path:  "/",
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"token":    token,
+			"username": user.Username,
+			"isAdmin":  user.IsAdmin,
 		})
-		w.WriteHeader(http.StatusOK)
 	}
 }

@@ -1,79 +1,91 @@
 package handlers
 
 import (
+	"airplane/service/middleware"
 	"airplane/service/models"
-	"airplane/service/utils"
-	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/julienschmidt/httprouter"
 )
 
-func RentHandler(db *sql.DB) httprouter.Handle {
+type RentRequest struct {
+	AirplaneID int    `json:"airplane_id"`
+	StartDate  string `json:"start_date"`
+	EndDate    string `json:"end_date"`
+}
+
+func RentHandler(db *sqlx.DB) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-		var rental models.Rental
-		err := json.NewDecoder(r.Body).Decode(&rental)
+		var req RentRequest
+		err := json.NewDecoder(r.Body).Decode(&req)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		tokenCookie, err := r.Cookie("token")
-		if err != nil {
+		user, ok := r.Context().Value(middleware.UserKey).(models.User)
+		if !ok {
+			log.Println(err)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
-		userID, err := utils.GetUserIDFromToken(tokenCookie.Value)
+		startDate, err := time.Parse("2006-01-02", req.StartDate)
 		if err != nil {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			http.Error(w, "Invalid start date format", http.StatusBadRequest)
 			return
 		}
 
-		rental.UserID = userID
-		rental.RentDate = time.Now()
+		endDate, err := time.Parse("2006-01-02", req.EndDate)
+		if err != nil {
+			http.Error(w, "Invalid end date format", http.StatusBadRequest)
+			return
+		}
+
+		if endDate.Before(startDate) {
+			log.Println(err)
+			http.Error(w, "Invalid date range", http.StatusBadRequest)
+			return
+		}
 
 		tx, err := db.Begin()
 		if err != nil {
+			log.Println(err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		var availability bool
-		err = tx.QueryRow("SELECT availability FROM airplanes WHERE id=$1 FOR UPDATE", rental.AirplaneID).Scan(&availability)
+		var count int
+		err = tx.QueryRow("SELECT COUNT(*) FROM reservations WHERE airplane_id = $1 AND (start_date <= $2 AND end_date >= $3)", req.AirplaneID, req.EndDate, req.StartDate).Scan(&count)
 		if err != nil {
 			tx.Rollback()
-			if err == sql.ErrNoRows {
-				http.Error(w, "Airplane not found", http.StatusNotFound)
-			} else {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-			}
-			return
-		}
-
-		if !availability {
-			tx.Rollback()
-			http.Error(w, "Airplane not available", http.StatusBadRequest)
-			return
-		}
-
-		_, err = tx.Exec("UPDATE airplanes SET availability=false WHERE id=$1", rental.AirplaneID)
-		if err != nil {
-			tx.Rollback()
+			log.Println(err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
-		_, err = tx.Exec("INSERT INTO rentals (user_id, airplane_id, rent_date, days) VALUES ($1, $2, $3, $4)", rental.UserID, rental.AirplaneID, rental.RentDate, rental.Days)
+		if count > 0 {
+			tx.Rollback()
+			log.Println(err)
+			http.Error(w, "Airplane not available for the selected period", http.StatusBadRequest)
+			return
+		}
+
+		_, err = tx.Exec("INSERT INTO reservations (user_id, airplane_id, start_date, end_date) VALUES ($1, $2, $3, $4)",
+			user.ID, req.AirplaneID, req.StartDate, req.EndDate)
 		if err != nil {
 			tx.Rollback()
+			log.Println(err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 
 		tx.Commit()
+
 		w.WriteHeader(http.StatusCreated)
 	}
 }
