@@ -3,6 +3,7 @@ package handlers
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/julienschmidt/httprouter"
@@ -13,7 +14,7 @@ func DeleteUserHandler(db *sqlx.DB) httprouter.Handle {
 		id := r.URL.Query().Get("id")
 
 		var count int
-		err := db.Get(&count, "SELECT COUNT(*) FROM reservations WHERE user_id=$1 AND end_date >= CURRENT_DATE", id)
+		err := db.Get(&count, "SELECT COUNT(*) FROM reservations WHERE user_id=$1 AND end_date >= $2", id, time.Now())
 		if err != nil {
 			log.Println(err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)

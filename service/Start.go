@@ -28,6 +28,10 @@ func Start(db *sqlx.DB) {
 	router.DELETE("/deleteRent", middleware.Admin()(handlers.DeleteRentHandler(db)))
 	router.GET("/reservations", middleware.Admin()(handlers.ListRentsHandler(db)))
 
+	router.GET("/users", middleware.Admin()(handlers.GetUsersHandler(db)))
+	router.PUT("/editUser", middleware.Admin()(handlers.UpdateUserHandler(db)))
+	router.DELETE("/deleteUser", middleware.Admin()(handlers.DeleteUserHandler(db)))
+
 	log.Println("Server started at :80")
 	log.Fatal(http.ListenAndServe(":80", middleware.Cors(router)))
 }
