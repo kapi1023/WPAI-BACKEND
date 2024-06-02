@@ -46,6 +46,12 @@ func RentHandler(db *sqlx.DB) httprouter.Handle {
 			return
 		}
 
+		if startDate.Before(time.Now()) {
+			log.Println(err)
+			http.Error(w, "Start date must be in the future", http.StatusBadRequest)
+			return
+		}
+
 		if endDate.Before(startDate) {
 			log.Println(err)
 			http.Error(w, "Invalid date range", http.StatusBadRequest)
